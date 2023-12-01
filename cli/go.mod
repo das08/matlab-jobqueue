@@ -1,4 +1,4 @@
-module github.com/das08/matlab-jobqueue
+module github.com/das08/matlab-jobqueue/cli
 
 go 1.19
 
