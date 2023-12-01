@@ -5,6 +5,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"net/http"
+	"strconv"
 )
 
 var (
@@ -16,6 +17,7 @@ func main() {
 	e.Use(middleware.Logger())
 
 	e.GET("/", hello)
+	e.GET("/jobs/completed", getCompletedJobs)
 	e.POST("/debug/create", createDummyJob)
 
 	// initialize redis server
@@ -31,4 +33,18 @@ func hello(c echo.Context) error {
 func createDummyJob(c echo.Context) error {
 	rs.CreateDummyJob(2)
 	return c.JSON(http.StatusOK, "OK")
+}
+
+func getCompletedJobs(c echo.Context) error {
+	count := c.QueryParam("count")
+	if count == "" {
+		count = "10"
+	}
+	countInt, _ := strconv.Atoi(count)
+	jobs, err := rs.GetCompletedJobs(countInt)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(http.StatusOK, jobs)
 }
