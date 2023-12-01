@@ -1,10 +1,6 @@
-module github.com/das08/matlab-jobqueue/cli
+module github.com/das08/matlab-jobqueue/connector
 
 go 1.19
-
-replace github.com/das08/matlab-jobqueue/connector => ../connector
-
-require github.com/das08/matlab-jobqueue/connector v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
