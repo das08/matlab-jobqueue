@@ -153,6 +153,41 @@ func (rs *RedisServer) processJob(job JobInfo) (bool, string) {
 	return true, "Job success"
 }
 
+func (rs *RedisServer) ReEnqueueAbortedJobs(jobId string) error {
+	// XRANGE jobQueueSTR 1600000000000-0 1600000000000-0
+	result, err := rs.rdb.XRange(rs.ctx, JobStreamKey, jobId, jobId).Result()
+	if err != nil {
+		return err
+	}
+
+	// XACK jobQueueSTR jobQueueGRP 1600000000000-0
+	_, err = rs.rdb.XAck(rs.ctx, JobStreamKey, JobGroupKey, jobId).Result()
+	if err != nil {
+		return err
+	}
+
+	// XDEL jobQueueSTR 1600000000000-0
+	_, err = rs.rdb.XDel(rs.ctx, JobStreamKey, jobId).Result()
+	if err != nil {
+		return err
+	}
+
+	// XADD jobQueueSTR * JobType build HostName host1 CommitHash commit-XXXXX
+	_, err = rs.rdb.XAdd(rs.ctx, &redis.XAddArgs{
+		Stream: JobStreamKey,
+		Values: map[string]interface{}{
+			"jobType":    result[0].Values["jobType"],
+			"hostName":   result[0].Values["hostName"],
+			"commitHash": result[0].Values["commitHash"],
+		},
+	}).Result()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (rs *RedisServer) SetCompletedJob(jobId string, success bool, message string) error {
 	var status string
 	// ZADD completedJobs timestamp jobId

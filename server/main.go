@@ -20,6 +20,7 @@ func main() {
 	e.GET("/jobs/completed", getCompletedJobs)
 	e.GET("/jobs/aborted", getAbortedJobs)
 	e.POST("/debug/create", createDummyJob)
+	e.POST("/jobs/reenqueue/:id", reenqueueJob)
 
 	// initialize redis server
 	rs = connector.Initialize("webserver.local")
@@ -62,4 +63,13 @@ func getAbortedJobs(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, jobs)
+}
+
+func reenqueueJob(c echo.Context) error {
+	id := c.Param("id")
+	err := rs.ReEnqueueAbortedJobs(id)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, "OK")
 }
