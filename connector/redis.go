@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"math/rand"
-	"strconv"
 	"time"
 )
 
@@ -176,8 +175,6 @@ func (rs *RedisServer) SetCompletedJob(jobId string, success bool, message strin
 		Message:   message,
 	}
 
-	fmt.Println(jobResult)
-
 	hsetKey := fmt.Sprintf("%s:%s", JobDetailKeyPrefix, jobId)
 	_, err = rs.rdb.HSet(rs.ctx, hsetKey, jobId, jobResult).Result()
 
@@ -193,21 +190,20 @@ func (rs *RedisServer) GetCompletedJobs(count int) ([]JobResult, error) {
 
 	var completedJobs []JobResult
 	for _, jobId := range result {
-		// XRANGE jobQueueSTR jobId jobId
-		result, err := rs.rdb.XRange(rs.ctx, JobStreamKey, jobId, jobId).Result()
+		// HGETALL jobDetail:jobId
+		hsetKey := fmt.Sprintf("%s:%s", JobDetailKeyPrefix, jobId)
+		jobResult, err := rs.rdb.HGetAll(rs.ctx, hsetKey).Result()
 		if err != nil {
 			return nil, err
 		}
-		job := fromXMessage(&result[0])
-		// jobId: 1600000000000-0 -> timestamp: 1600000000000
-		timestamp, _ := strconv.ParseInt(jobId[:13], 10, 64)
-		fmt.Printf("Timestamp: %d \n", timestamp)
-		completedJobs = append(completedJobs, JobResult{
-			Id:        job.Id,
-			JobType:   job.JobType,
-			HostName:  job.HostName,
-			Timestamp: timestamp,
-		})
+
+		// convert map to struct
+		jr := JobResult{}
+		err = json.Unmarshal([]byte(jobResult[jobId]), &jr)
+		if err != nil {
+			return nil, err
+		}
+		completedJobs = append(completedJobs, jr)
 	}
 
 	return completedJobs, nil
