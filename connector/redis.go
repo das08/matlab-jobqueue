@@ -46,11 +46,12 @@ func fromXMessage(xm *redis.XMessage) JobInfo {
 }
 
 type RedisServer struct {
-	rdb *redis.Client
-	ctx context.Context
+	rdb        *redis.Client
+	ctx        context.Context
+	clientHost string
 }
 
-func Initialize() *RedisServer {
+func Initialize(hostName string) *RedisServer {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "",
@@ -58,8 +59,9 @@ func Initialize() *RedisServer {
 	})
 
 	rs := &RedisServer{
-		rdb: rdb,
-		ctx: context.Background(),
+		rdb:        rdb,
+		ctx:        context.Background(),
+		clientHost: hostName,
 	}
 
 	rs.createStreamGroup()
@@ -84,7 +86,7 @@ func (rs *RedisServer) CreateDummyJob(count int) {
 		randomId := rand.Intn(10000)
 		job := JobInfo{
 			JobType:    "build",
-			HostName:   "host1",
+			HostName:   rs.clientHost,
 			CommitHash: fmt.Sprintf("commit-%d", randomId),
 		}
 		_, err := rs.rdb.XAdd(rs.ctx, &redis.XAddArgs{
@@ -169,7 +171,7 @@ func (rs *RedisServer) SetCompletedJob(jobId string, success bool, message strin
 	jobResult := JobResult{
 		Id:        jobId,
 		JobType:   "***",
-		HostName:  "host1",
+		HostName:  rs.clientHost,
 		Timestamp: time.Now().Unix(),
 		Status:    status,
 		Message:   message,

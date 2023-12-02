@@ -21,7 +21,7 @@ func main() {
 	e.POST("/debug/create", createDummyJob)
 
 	// initialize redis server
-	rs = connector.Initialize()
+	rs = connector.Initialize("webserver.local")
 
 	e.Logger.Fatal(e.Start(":4000"))
 }
