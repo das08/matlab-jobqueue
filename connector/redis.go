@@ -210,3 +210,30 @@ func (rs *RedisServer) GetCompletedJobs(count int) ([]JobResult, error) {
 
 	return completedJobs, nil
 }
+
+func (rs *RedisServer) GetAbortedJobs(count int) ([]JobInfo, error) {
+	// XPENDING jobQueueSTR jobQueueGRP - + count
+	result, err := rs.rdb.XPendingExt(rs.ctx, &redis.XPendingExtArgs{
+		Stream: JobStreamKey,
+		Group:  JobGroupKey,
+		Start:  "-",
+		End:    "+",
+		Count:  int64(count),
+	}).Result()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var abortedJobs []JobInfo
+	for _, pending := range result {
+		// XRANGE jobQueueSTR 1600000000000-0 1600000000000-0 COUNT 1
+		xrangeResult, err := rs.rdb.XRange(rs.ctx, JobStreamKey, pending.ID, pending.ID).Result()
+		if err != nil {
+			return nil, err
+		}
+		abortedJobs = append(abortedJobs, fromXMessage(&xrangeResult[0]))
+	}
+
+	return abortedJobs, nil
+}

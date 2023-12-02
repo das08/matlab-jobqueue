@@ -18,6 +18,7 @@ func main() {
 
 	e.GET("/", hello)
 	e.GET("/jobs/completed", getCompletedJobs)
+	e.GET("/jobs/aborted", getAbortedJobs)
 	e.POST("/debug/create", createDummyJob)
 
 	// initialize redis server
@@ -42,6 +43,20 @@ func getCompletedJobs(c echo.Context) error {
 	}
 	countInt, _ := strconv.Atoi(count)
 	jobs, err := rs.GetCompletedJobs(countInt)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(http.StatusOK, jobs)
+}
+
+func getAbortedJobs(c echo.Context) error {
+	count := c.QueryParam("count")
+	if count == "" {
+		count = "10"
+	}
+	countInt, _ := strconv.Atoi(count)
+	jobs, err := rs.GetAbortedJobs(countInt)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
