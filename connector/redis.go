@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"math/rand"
@@ -10,9 +11,10 @@ import (
 )
 
 var (
-	JobStreamKey = "jobQueueSTR"
-	JobGroupKey  = "jobQueueGRP"
-	CompletedKey = "completedJobs"
+	JobStreamKey       = "jobQueueSTR"
+	JobGroupKey        = "jobQueueGRP"
+	CompletedKey       = "completedJobs"
+	JobDetailKeyPrefix = "jobDetail"
 )
 
 type JobInfo struct {
@@ -27,6 +29,12 @@ type JobResult struct {
 	JobType   string `json:"jobType"`
 	HostName  string `json:"hostName"`
 	Timestamp int64  `json:"timestamp"`
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+}
+
+func (jr JobResult) MarshalBinary() ([]byte, error) {
+	return json.Marshal(jr)
 }
 
 func fromXMessage(xm *redis.XMessage) JobInfo {
@@ -110,19 +118,21 @@ func (rs *RedisServer) ExecJob() {
 
 	// process job
 	if len(result) > 0 {
-		//job := JobInfo{
-		//	Id:         result[0].Messages[0].ID,
-		//	JobType:    result[0].Messages[0].Values["jobType"].(string),
-		//	HostName:   result[0].Messages[0].Values["hostName"].(string),
-		//	CommitHash: result[0].Messages[0].Values["commitHash"].(string),
-		//}
 		job := fromXMessage(&result[0].Messages[0])
-		//fmt.Println(result[0].Messages[0].ID)
 		fmt.Printf("Start -> jobID: %s \n", job.Id)
-		err := rs.processJob(job)
+
+		jobSuccess, jobMessage := rs.processJob(job)
+
+		// TODO: mutex or transaction
+		err = rs.ackJob(job.Id)
 		if err != nil {
 			panic(err)
 		}
+		err = rs.SetCompletedJob(job.Id, jobSuccess, jobMessage)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("Finished -> jobID: %s \n", job.Id)
 	} else {
 		fmt.Println("No job")
 	}
@@ -135,29 +145,41 @@ func (rs *RedisServer) ackJob(jobId string) error {
 	return err
 }
 
-func (rs *RedisServer) processJob(job JobInfo) error {
+func (rs *RedisServer) processJob(job JobInfo) (bool, string) {
 	// do something
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 
-	err := rs.ackJob(job.Id)
-	if err != nil {
-		return err
-	}
-	err = rs.SetCompletedJob(job.Id)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Finished -> jobID: %s \n", job.Id)
-
-	return nil
+	return true, "Job success"
 }
 
-func (rs *RedisServer) SetCompletedJob(jobId string) error {
+func (rs *RedisServer) SetCompletedJob(jobId string, success bool, message string) error {
+	var status string
 	// ZADD completedJobs timestamp jobId
 	_, err := rs.rdb.ZAdd(rs.ctx, CompletedKey, redis.Z{
 		Score:  float64(time.Now().Unix()),
 		Member: jobId,
 	}).Result()
+
+	if success {
+		status = "success"
+	} else {
+		status = "failed"
+	}
+
+	// HSET jobDetail jobId jobDetail
+	jobResult := JobResult{
+		Id:        jobId,
+		JobType:   "***",
+		HostName:  "host1",
+		Timestamp: time.Now().Unix(),
+		Status:    status,
+		Message:   message,
+	}
+
+	fmt.Println(jobResult)
+
+	hsetKey := fmt.Sprintf("%s:%s", JobDetailKeyPrefix, jobId)
+	_, err = rs.rdb.HSet(rs.ctx, hsetKey, jobId, jobResult).Result()
 
 	return err
 }
