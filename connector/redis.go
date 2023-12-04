@@ -272,3 +272,30 @@ func (rs *RedisServer) GetAbortedJobs(count int) ([]JobInfo, error) {
 
 	return abortedJobs, nil
 }
+
+func (rs *RedisServer) GetPendingJobs(count int) ([]JobInfo, error) {
+	// XINFO GROUPS jobQueueSTR
+	info, err := rs.rdb.XInfoGroups(rs.ctx, JobStreamKey).Result()
+	if err != nil {
+		return nil, err
+	}
+	lastDeliveredId := info[0].LastDeliveredID
+
+	// XREAD STREAMS jobQueueSTR lastDeliveredId
+	result, err := rs.rdb.XRead(rs.ctx, &redis.XReadArgs{
+		Streams: []string{JobStreamKey, lastDeliveredId},
+		Count:   int64(count),
+		Block:   0,
+	}).Result()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var pendingJobs []JobInfo
+	for _, pending := range result[0].Messages {
+		pendingJobs = append(pendingJobs, fromXMessage(&pending))
+	}
+
+	return pendingJobs, nil
+}

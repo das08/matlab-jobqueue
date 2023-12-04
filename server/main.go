@@ -19,6 +19,7 @@ func main() {
 	e.GET("/", hello)
 	e.GET("/jobs/completed", getCompletedJobs)
 	e.GET("/jobs/aborted", getAbortedJobs)
+	e.GET("/jobs/pending", getPendingJobs)
 	e.POST("/debug/create", createDummyJob)
 	e.POST("/jobs/reenqueue/:id", reenqueueJob)
 
@@ -58,6 +59,20 @@ func getAbortedJobs(c echo.Context) error {
 	}
 	countInt, _ := strconv.Atoi(count)
 	jobs, err := rs.GetAbortedJobs(countInt)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(http.StatusOK, jobs)
+}
+
+func getPendingJobs(c echo.Context) error {
+	count := c.QueryParam("count")
+	if count == "" {
+		count = "10"
+	}
+	countInt, _ := strconv.Atoi(count)
+	jobs, err := rs.GetPendingJobs(countInt)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
